@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="theme-color" content="#000000">
+    <title>📈 RSI Divergence</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg:#f8f9fa; --surface:#fff; --surface-2:#f1f3f4; --text:#202124;
+            --text-muted:#5f6368; --border:#dadce0; --border-light:#e8eaed;
+            --primary:#1a73e8; --primary-fill:#1a73e8; --primary-text:#fff;
+            --success:#1e8e3e; --danger:#d93025; --warning:#b06000; --warning-bg:#feefc3;
+            --input-bg:#fff; --row-hover:#f8f9fa;
+            --shadow-1:0 1px 2px rgba(60,64,67,.1),0 1px 3px 1px rgba(60,64,67,.06);
+            --shadow-2:0 1px 3px rgba(60,64,67,.15),0 4px 8px 3px rgba(60,64,67,.08);
+            --focus-ring:0 0 0 3px rgba(26,115,232,.35);
+        }
+        body.dark {
+            color-scheme: dark;
+            --bs-body-bg:#000; --bs-body-color:#e8eaed; --bs-border-color:#3c4043;
+            --bg:#000; --surface:#121212; --surface-2:#1e1e1e; --text:#e8eaed;
+            --text-muted:#b0b4b8; --border:#3c4043; --border-light:#2a2a2a;
+            --primary:#8ab4f8; --primary-fill:#8ab4f8; --primary-text:#202124;
+            --success:#81c995; --danger:#f28b82; --warning:#fdd663; --warning-bg:#3c2f00;
+            --input-bg:#1e1e1e; --row-hover:#1a1a1a;
+            --shadow-1:0 1px 3px rgba(0,0,0,.7),0 1px 2px rgba(0,0,0,.5);
+            --shadow-2:0 4px 8px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);
+            --focus-ring:0 0 0 3px rgba(138,180,248,.45);
+        }
+        * { box-sizing:border-box; }
+        html { background-color:var(--bg) !important; min-height:100vh; }
+        body {
+            font-family:'Roboto',system-ui,-apple-system,'Segoe UI',sans-serif;
+            background-color:var(--bg) !important; color:var(--text); margin:0; padding:12px;
+            min-height:100vh; transition:background .2s ease,color .2s ease;
+        }
+        .container { max-width:100%; padding:0; }
+        .card { border-radius:16px; background:var(--surface); box-shadow:var(--shadow-1);
+            margin-bottom:12px; padding:16px; border:none; color:var(--text); }
+        .card h5 { font-size:1rem; font-weight:500; margin-bottom:12px; }
+        .text-muted { color:var(--text-muted) !important; }
+        .header-row { display:flex; align-items:center; justify-content:space-between;
+            margin-bottom:16px; padding:0 4px; gap:8px; }
+        .header-row h1 { font-size:1.4rem; font-weight:500; margin:0; }
+        .header-actions { display:flex; gap:8px; align-items:center; }
+        .theme-toggle-btn { width:44px; height:44px; border-radius:50%; border:none;
+            background:var(--surface-2); color:var(--text); font-size:1.2rem; cursor:pointer;
+            box-shadow:var(--shadow-1); }
+        .theme-toggle-btn:hover { background:var(--border); }
+        .logout-btn { height:44px; padding:0 18px; border-radius:22px; border:1px solid var(--border);
+            background:var(--surface); color:var(--text); font-size:.85rem; font-weight:500;
+            cursor:pointer; box-shadow:var(--shadow-1); }
+        .logout-btn:hover { background:var(--surface-2); border-color:var(--danger); color:var(--danger); }
+        .stat-grid { display:flex; gap:24px; flex-wrap:wrap; }
+        .stat .k { font-size:.7rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted); }
+        .stat .v { font-size:1.15rem; font-weight:500; }
+        .toolbar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+        .seg-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.4px;
+            color:var(--text-muted); margin-right:6px; }
+        .seg { display:inline-flex; background:var(--surface-2); border-radius:999px; padding:3px; gap:2px; }
+        .seg button { border:none; background:transparent; color:var(--text-muted); font-size:.8rem;
+            font-weight:500; padding:.3rem .85rem; border-radius:999px; cursor:pointer; }
+        .seg button.active { background:var(--primary-fill); color:var(--primary-text); }
+        .form-control-sm { font-size:.85rem; padding:.45rem .7rem; background:var(--input-bg);
+            color:var(--text); border:1px solid var(--border); border-radius:8px; }
+        .form-control-sm:focus { border-color:var(--primary); box-shadow:var(--focus-ring); outline:none; }
+        .table-scroll { overflow-x:auto; }
+        table.table { font-size:.85rem; margin:0; color:var(--text);
+            --bs-table-bg: transparent; --bs-table-color: var(--text);
+            --bs-table-hover-bg: var(--row-hover); --bs-table-border-color: var(--border-light); }
+        table.table thead th { font-size:.72rem; text-transform:uppercase; letter-spacing:.3px;
+            color:var(--text-muted); font-weight:500; border-bottom:1px solid var(--border);
+            white-space:nowrap; padding:.5rem .6rem; cursor:pointer; user-select:none; }
+        table.table tbody td { border-bottom:1px solid var(--border-light); padding:.5rem .6rem;
+            vertical-align:middle; white-space:nowrap; }
+        table.table tbody tr:hover { background:var(--row-hover); }
+        tr.invalid { opacity:.55; }
+        .sym { font-weight:600; }
+        .symlink { color:var(--primary); text-decoration:none; }
+        .symlink:hover { text-decoration:underline; }
+        .fno-tag { font-size:.6rem; font-weight:700; color:var(--warning); border:1px solid var(--warning);
+            border-radius:4px; padding:0 3px; margin-left:5px; vertical-align:middle; }
+        .inv-tag { font-size:.6rem; font-weight:700; color:var(--danger); border:1px solid var(--danger);
+            border-radius:4px; padding:0 3px; margin-left:5px; vertical-align:middle; }
+        .form-tag { font-size:.6rem; font-weight:700; color:var(--primary); border:1px solid var(--primary);
+            border-radius:4px; padding:0 3px; margin-left:5px; vertical-align:middle; }
+        .res-tag { font-size:.6rem; font-weight:700; color:var(--success); border:1px solid var(--success);
+            border-radius:4px; padding:0 3px; margin-left:5px; vertical-align:middle; }
+        .num { text-align:right; font-variant-numeric:tabular-nums; }
+        .pos { color:var(--success); } .neg { color:var(--danger); }
+        .pivot { color:var(--text-muted); font-size:.78rem; }
+        .badge-strength { display:inline-block; min-width:44px; text-align:center; padding:.15rem .5rem;
+            border-radius:999px; font-weight:600; font-size:.78rem; }
+        .s-strong { background:rgba(30,142,62,.15); color:var(--success); }
+        .s-med { background:var(--warning-bg); color:var(--warning); }
+        .s-weak { background:var(--surface-2); color:var(--text-muted); }
+        .empty { padding:32px; text-align:center; color:var(--text-muted); }
+    </style>
+</head>
+<body class="dark">
+<div class="container">
+    <div class="header-row">
+        <h1>📈 RSI Divergence</h1>
+        <div class="header-actions">
+            <button id="themeToggle" class="theme-toggle-btn" title="Toggle theme">🌙</button>
+            <button id="logoutBtn" class="logout-btn" onclick="location.href='{{ url_for('logout') }}'">Logout</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="stat-grid">
+            <div class="stat"><div class="k">Signals shown</div><div class="v" id="countV">{{ signals|length }}</div></div>
+            <div class="stat"><div class="k">Bhavcopy date</div><div class="v">{{ snap.asof or '—' }}</div></div>
+        </div>
+    </div>
+
+    <div class="card" style="padding:10px 14px;">
+        <div class="toolbar">
+            <div><span class="seg-label">Universe</span><span class="seg" id="universeSeg">
+                <button data-u="all" class="active">All</button>
+                <button data-u="fno">F&amp;O</button>
+            </span></div>
+            <div><span class="seg-label">Direction</span><span class="seg" id="directionSeg">
+                <button data-d="bullish" class="active">Bullish</button>
+                <button data-d="bearish">Bearish</button>
+            </span></div>
+            <div><span class="seg-label">View</span><span class="seg" id="viewSeg">
+                <button data-v="current" class="active">Current</button>
+                <button data-v="resolved">Resolved</button>
+                <button data-v="invalidated">Invalidated</button>
+                <button data-v="all">All</button>
+            </span></div>
+            <div><span class="seg-label">State</span><span class="seg" id="stateSeg">
+                <button data-s="all" class="active">Both</button>
+                <button data-s="confirmed">Confirmed</button>
+                <button data-s="forming">Forming</button>
+            </span></div>
+            <input type="text" id="searchBox" class="form-control-sm" style="flex:1;min-width:150px;"
+                   placeholder="Search symbol (press / to focus)" autocomplete="off">
+            <label class="text-muted" style="font-size:.8rem;">Min strength</label>
+            <input type="number" id="minStrength" class="form-control-sm" style="width:78px;"
+                   value="0" min="0" max="100" step="5">
+            <label class="text-muted" style="font-size:.8rem;">Max age (candles)</label>
+            <input type="number" id="maxAge" class="form-control-sm" style="width:88px;"
+                   value="30" min="0" step="5">
+            <button id="downloadBtn" class="logout-btn" title="Download the current list as CSV">⬇ CSV</button>
+        </div>
+    </div>
+
+    <div class="card" style="padding:10px 4px;">
+        <h5 style="padding-left:8px;" id="tableTitle">📋 Signals — regular bullish divergence</h5>
+        <div class="table-scroll">
+            <table class="table table-hover" id="sigTable">
+                <thead>
+                    <tr>
+                        <th data-key="symbol">Symbol <span>↕</span></th>
+                        <th data-key="signal_date">Signal <span>↕</span></th>
+                        <th data-key="price" class="num">Entry <span>↕</span></th>
+                        <th data-key="last_price" class="num">Last <span>↕</span></th>
+                        <th data-key="pct_since" class="num">% Chg <span>↕</span></th>
+                        <th data-key="rsi" class="num">RSI <span>↕</span></th>
+                        <th>Pivot-1</th>
+                        <th>Pivot-2</th>
+                        <th data-key="strength" class="num">Strength <span>↕</span></th>
+                        <th data-key="age_bars" class="num">Age <span>↕</span></th>
+                    </tr>
+                </thead>
+                <tbody id="sigBody"></tbody>
+            </table>
+            <div id="empty" class="empty" style="display:none;">No signals match.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SIGNALS = {{ signals|tojson }};
+const root = document.body, toggle = document.getElementById('themeToggle');
+if (localStorage.getItem('theme') === 'light') root.classList.remove('dark');
+toggle.textContent = root.classList.contains('dark') ? '☀️' : '🌙';
+toggle.onclick = () => {
+    root.classList.toggle('dark');
+    localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
+    toggle.textContent = root.classList.contains('dark') ? '☀️' : '🌙';
+};
+
+const state = { universe: 'all', direction: 'bullish', view: 'current', state: 'all' };
+
+const fmt = (n, d=2) => (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(d);
+const pivot = (dt, p, r) => `<span class="pivot">${dt||'—'} · ₹${fmt(p)} · RSI ${fmt(r,1)}</span>`;
+const badge = s => {
+    const cls = s >= 70 ? 's-strong' : s >= 50 ? 's-med' : 's-weak';
+    return `<span class="badge-strength ${cls}">${fmt(s,0)}</span>`;
+};
+
+let sortKey = 'signal_date', sortDir = -1;   // recency first by default
+let lastRows = [];
+function enriched() {
+    return SIGNALS.map(s => {
+        const pct = (s.last_price && s.price) ? (s.last_price - s.price) / s.price * 100 : null;
+        return {...s, pct_since: pct};
+    });
+}
+function render() {
+    const q = (document.getElementById('searchBox').value || '').trim().toUpperCase();
+    const minS = parseFloat(document.getElementById('minStrength').value) || 0;
+    const maxAge = parseInt(document.getElementById('maxAge').value, 10);
+    document.getElementById('tableTitle').textContent =
+        `📋 Signals — regular ${state.direction} divergence` +
+        (state.universe === 'fno' ? ' (F&O)' : '') +
+        (state.state !== 'all' ? ` — ${state.state}` : '') +
+        (state.view === 'current' ? ' — current setups' :
+         state.view === 'resolved' ? ' — resolved (RSI)' :
+         state.view === 'invalidated' ? ' — invalidated (study)' : ' — all') +
+        (isNaN(maxAge) ? '' : ` — ≤${maxAge} candles`);
+    let rows = enriched().filter(s =>
+        s.direction === state.direction &&
+        (state.universe === 'all' || s.is_fno) &&
+        (state.view === 'all' ||
+         (state.view === 'current' && !s.invalidated && !s.resolved) ||
+         (state.view === 'resolved' && !s.invalidated && !!s.resolved) ||
+         (state.view === 'invalidated' && !!s.invalidated)) &&
+        (state.state === 'all' || (s.state || 'confirmed') === state.state) &&
+        (isNaN(maxAge) || (s.age_bars ?? 0) <= maxAge) &&
+        s.symbol.includes(q) &&
+        (s.strength || 0) >= minS
+    );
+    rows.sort((a, b) => {
+        const x = a[sortKey], y = b[sortKey];
+        if (x === y) return 0;
+        return (x > y ? 1 : -1) * sortDir;
+    });
+    document.getElementById('countV').textContent = rows.length;
+    lastRows = rows;
+    const body = document.getElementById('sigBody');
+    body.innerHTML = rows.map(s => {
+        const pct = s.pct_since;
+        const pctCls = pct === null ? '' : (pct >= 0 ? 'pos' : 'neg');
+        const pctTxt = pct === null ? '—' : (pct >= 0 ? '+' : '') + fmt(pct) + '%';
+        const tags = (s.is_fno ? '<span class="fno-tag">F&amp;O</span>' : '') +
+                     ((s.state === 'forming') ? '<span class="form-tag">forming</span>' : '') +
+                     (s.resolved ? '<span class="res-tag">resolved</span>' : '') +
+                     (s.invalidated ? '<span class="inv-tag">invalid</span>' : '');
+        return `<tr class="${s.invalidated ? 'invalid' : ''}">
+            <td class="sym"><a class="symlink" href="https://www.tradingview.com/chart/?symbol=NSE:${s.symbol}" target="_blank" rel="noopener">${s.symbol}</a>${tags}</td>
+            <td>${s.signal_date||'—'}</td>
+            <td class="num">₹${fmt(s.price)}</td>
+            <td class="num">₹${fmt(s.last_price)}</td>
+            <td class="num ${pctCls}">${pctTxt}</td>
+            <td class="num">${fmt(s.rsi,1)}</td>
+            <td>${pivot(s.pivot1_date, s.pivot1_price, s.pivot1_rsi)}</td>
+            <td>${pivot(s.pivot2_date, s.pivot2_price, s.pivot2_rsi)}</td>
+            <td class="num">${badge(s.strength)}</td>
+            <td class="num">${s.age_bars ?? '—'}d</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+}
+document.querySelectorAll('#universeSeg button').forEach(b => {
+    b.onclick = () => {
+        state.universe = b.dataset.u;
+        document.querySelectorAll('#universeSeg button').forEach(x => x.classList.toggle('active', x === b));
+        render();
+    };
+});
+document.querySelectorAll('#directionSeg button').forEach(b => {
+    b.onclick = () => {
+        state.direction = b.dataset.d;
+        document.querySelectorAll('#directionSeg button').forEach(x => x.classList.toggle('active', x === b));
+        render();
+    };
+});
+document.querySelectorAll('#viewSeg button').forEach(b => {
+    b.onclick = () => {
+        state.view = b.dataset.v;
+        document.querySelectorAll('#viewSeg button').forEach(x => x.classList.toggle('active', x === b));
+        render();
+    };
+});
+document.querySelectorAll('#stateSeg button').forEach(b => {
+    b.onclick = () => {
+        state.state = b.dataset.s;
+        document.querySelectorAll('#stateSeg button').forEach(x => x.classList.toggle('active', x === b));
+        render();
+    };
+});
+document.querySelectorAll('#sigTable thead th[data-key]').forEach(th => {
+    th.onclick = () => {
+        const k = th.dataset.key;
+        if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = -1; }
+        render();
+    };
+});
+const CSV_COLS = ['symbol','direction','state','signal_date','price','last_price','pct_since','rsi',
+    'pivot1_date','pivot1_price','pivot1_rsi','pivot2_date','pivot2_price','pivot2_rsi',
+    'strength','age_bars','is_fno','invalidated','resolved','resolution_date','max_rsi_since','min_rsi_since'];
+function downloadCSV() {
+    const esc = v => (v === null || v === undefined) ? ''
+        : (typeof v === 'number' ? v : '"' + String(v).replace(/"/g, '""') + '"');
+    const lines = [CSV_COLS.join(',')];
+    for (const r of lastRows) lines.push(CSV_COLS.map(c => esc(r[c])).join(','));
+    const blob = new Blob([lines.join('\n')], {type: 'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rsi_divergence_${state.direction}${state.universe === 'fno' ? '_fno' : ''}${state.state !== 'all' ? '_' + state.state : ''}_${state.view}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+}
+document.getElementById('downloadBtn').onclick = downloadCSV;
+document.getElementById('searchBox').oninput = render;
+document.getElementById('minStrength').oninput = render;
+document.getElementById('maxAge').oninput = render;
+document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault(); document.getElementById('searchBox').focus();
+    }
+});
+render();
+</script>
+</body>
+</html>

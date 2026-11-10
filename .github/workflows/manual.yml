@@ -1,0 +1,227 @@
+name: manual
+
+# The one-off and diagnostic jobs that used to live in each project's own
+# workflow folder. Nothing here is scheduled - run it from the Actions tab or
+# the GitHub mobile app.
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        required: true
+        default: fno-backfill
+        options:
+          - fno-backfill
+          - ivp-backfill
+          - ivp-check-db
+          - ivp-clear-metrics
+          - gift-probe
+          - gift-refresh-holidays
+          - gift-telegram-note
+      start:
+        description: "fno-backfill: first session (YYYY-MM-DD)"
+        required: false
+        default: "2024-07-08"
+      target:
+        description: "ivp-backfill: trading days to collect"
+        required: false
+        default: "312"
+      lookback:
+        description: "gift-probe: weekdays to inspect (1-30)"
+        required: false
+        default: "16"
+      backfill:
+        description: "gift-probe: true = rewrite upload_times.csv for all days"
+        required: false
+        default: "true"
+      message:
+        description: "gift-telegram-note: text to send"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  fno-backfill:
+    if: inputs.job == 'fno-backfill'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    concurrency:
+      group: pipe-fno-automation
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/fno-automation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: projects/fno-automation/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Backfill sessions
+        run: python backfill.py --from "${{ inputs.start }}"
+      - name: Commit shards
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/fno-automation/data/history
+          message: "backfill: fno from ${{ inputs.start }}"
+      - name: Report coverage
+        run: |
+          python - <<'PY'
+          import glob, gzip, os
+          files = sorted(glob.glob("data/history/*.csv.gz"))
+          rows = sum(sum(1 for _ in gzip.open(f, "rt")) - 1 for f in files)
+          size = sum(os.path.getsize(f) for f in files) / 1e6
+          print(f"{len(files)} sessions, {rows:,} rows, {size:.1f} MB")
+          PY
+
+  ivp-backfill:
+    if: inputs.job == 'ivp-backfill'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: pipe-ivp-ivr-analysis
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/ivp-ivr-analysis
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: projects/ivp-ivr-analysis/requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Remove old database (clean start)
+        run: |
+          rm -f data/iv_history.db
+      - name: Run backfill
+        run: python scripts/backfill.py --target ${{ inputs.target }}
+      - name: Verify database has at least target days
+        run: |
+          python -c "import sqlite3; conn = sqlite3.connect('data/iv_history.db'); count = conn.execute('SELECT COUNT(DISTINCT date) FROM daily_iv').fetchone()[0]; target = int('${{ inputs.target }}'); print(f'Days in database: {count}'); assert count >= target, f'Expected {target}, got {count}'; conn.close()"
+      - name: Commit results
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/ivp-ivr-analysis/data projects/ivp-ivr-analysis/config
+          message: "backfill: ivp ${{ inputs.target }} days"
+
+  ivp-check-db:
+    if: inputs.job == 'ivp-check-db'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: projects/ivp-ivr-analysis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Rebuild database from per-day files
+        run: python scripts/bootstrap_db.py
+      - name: Run DB check
+        run: python scripts/check_db.py
+
+  ivp-clear-metrics:
+    if: inputs.job == 'ivp-clear-metrics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: pipe-ivp-ivr-analysis
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/ivp-ivr-analysis
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rebuild database from per-day files
+        run: python scripts/bootstrap_db.py
+      - name: Delete today's metrics
+        run: |
+          python -c "import sqlite3; from datetime import datetime; conn = sqlite3.connect('data/iv_history.db'); cursor = conn.cursor(); today = datetime.now().strftime('%Y-%m-%d'); cursor.execute('DELETE FROM daily_metrics WHERE date = ?', (today,)); conn.commit(); deleted = cursor.rowcount; conn.close(); print(f'Deleted {deleted} rows for {today}')"
+
+  gift-probe:
+    if: inputs.job == 'gift-probe'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: projects/gift-nifty-oi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe report availability (headers only)
+        env:
+          LOOKBACK: ${{ inputs.lookback }}
+          BACKFILL: ${{ inputs.backfill }}
+        run: python probe_oi.py
+      - name: Commit results
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/gift-nifty-oi/data
+          message: "probe: gift publication times"
+
+  gift-refresh-holidays:
+    if: inputs.job == 'gift-refresh-holidays'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: pipe-gift-nifty-oi
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/gift-nifty-oi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Refresh NSE IX holiday list
+        run: python refresh_holidays.py
+      - name: Commit if changed
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/gift-nifty-oi/data
+          message: "data: gift holidays"
+
+  gift-telegram-note:
+    if: inputs.job == 'gift-telegram-note'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: projects/gift-nifty-oi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MSG: ${{ inputs.message }}
+        run: |
+          CID="${TELEGRAM_CHAT_ID:-}"
+          if [ -z "$CID" ]; then CID=$(python3 resolve_chat.py); fi
+          if [ -z "$CID" ]; then echo "no chat id"; exit 1; fi
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+               --data-urlencode chat_id="$CID" --data-urlencode text="$MSG" | head -c 400
+          echo

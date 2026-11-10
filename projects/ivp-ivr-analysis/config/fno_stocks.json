@@ -1,0 +1,11 @@
+{
+  "stocks": [
+    "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+    "SBIN", "HINDUNILVR", "ITC", "BHARTIARTL", "KOTAKBANK",
+    "LT", "M&M", "MARUTI", "SUNPHARMA", "TITAN",
+    "BAJFINANCE", "WIPRO", "HCLTECH", "ASIANPAINT", "AXISBANK"
+  ],
+  "indices": ["NIFTY", "BANKNIFTY"],
+  "year_days": 252,
+  "backfill_years": 2
+}

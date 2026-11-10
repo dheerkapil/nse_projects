@@ -1,0 +1,47 @@
+name: commit-push
+description: >
+  Commit only the given paths and push, retrying with a rebase because up to five
+  pipelines share one branch. Scoping the paths is what stops one pipeline from
+  committing another pipeline's half-written data.
+
+inputs:
+  paths:
+    description: Space-separated paths to stage (relative to repo root).
+    required: true
+  message:
+    description: Commit message prefix. The UTC date is appended automatically.
+    required: false
+    default: data update
+
+runs:
+  using: composite
+  steps:
+    - name: Commit and push
+      shell: bash
+      run: |
+        set -uo pipefail
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Stage only this pipeline's paths.
+        git add -- ${{ inputs.paths }} 2>/dev/null || true
+
+        if git diff --staged --quiet; then
+          echo "nothing to commit for: ${{ inputs.paths }}"
+          exit 0
+        fi
+
+        git commit -m "${{ inputs.message }} $(date -u +%F)"
+
+        # Other pipelines may have pushed between our checkout and now.
+        for attempt in 1 2 3 4 5; do
+          if git pull --rebase --autostash --quiet && git push --quiet; then
+            echo "pushed on attempt ${attempt}"
+            exit 0
+          fi
+          echo "push attempt ${attempt} lost the race, retrying"
+          sleep $(( attempt * 5 ))
+        done
+
+        echo "::error::could not push after 5 attempts - another pipeline kept winning the race"
+        exit 1

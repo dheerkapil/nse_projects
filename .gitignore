@@ -1,0 +1,16 @@
+# generated deliverables — these go to Telegram, they do not belong in git
+projects/fno-automation/out/
+projects/fno-automation/*.xlsx
+projects/fno-automation/*.png
+projects/fno-automation/summary.txt
+projects/ivp-ivr-analysis/output/*.xlsx
+projects/ivp-ivr-analysis/data/iv_history.db
+projects/gift-nifty-oi/chart.png
+projects/nse-rsi-divergence/data/*.db
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env

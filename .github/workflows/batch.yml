@@ -1,0 +1,407 @@
+name: batch
+
+# One workflow, five pipelines. Each pipeline keeps the exact cron slots it had
+# in its own repository, so nothing changes about when things fire. Jobs are
+# gated on github.event.schedule - GitHub tells the run which cron string
+# triggered it, so a late run still runs the right pipeline instead of guessing
+# from the clock.
+#
+# Deliberately NOT a single concurrency group: each pipeline has its own, so a
+# long F&O run cannot block the 16:00 price-movers slot. That was the whole
+# point of splitting them.
+
+on:
+  schedule:
+    # --- price-movers: 16:00-20:00 IST, Mon-Fri (9 slots) ---
+    - cron: "30 10 * * 1-5"
+    - cron: "0 11 * * 1-5"
+    - cron: "30 11 * * 1-5"
+    - cron: "0 12 * * 1-5"
+    - cron: "30 12 * * 1-5"
+    - cron: "0 13 * * 1-5"
+    - cron: "30 13 * * 1-5"
+    - cron: "0 14 * * 1-5"
+    - cron: "30 14 * * 1-5"
+    # --- fno-automation: 18:40-20:40 IST, every day (5 slots) ---
+    - cron: "10 13 * * *"
+    - cron: "40 13 * * *"
+    - cron: "10 14 * * *"
+    - cron: "40 14 * * *"
+    - cron: "10 15 * * *"
+    # --- ivp-ivr-analysis: 18:00-00:00 IST, Mon-Fri (13 slots) ---
+    - cron: "0 15 * * 1-5"
+    - cron: "30 15 * * 1-5"
+    - cron: "0 16 * * 1-5"
+    - cron: "30 16 * * 1-5"
+    - cron: "0 17 * * 1-5"
+    - cron: "30 17 * * 1-5"
+    - cron: "0 18 * * 1-5"
+    - cron: "30 18 * * 1-5"
+    # --- gift-nifty-oi: 05:00-07:00 IST, Tue-Sat (5 slots) ---
+    - cron: "30 23 * * 1-5"
+    - cron: "0 0 * * 2-6"
+    - cron: "30 0 * * 2-6"
+    - cron: "0 1 * * 2-6"
+    - cron: "30 1 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: "Which pipeline to run"
+        type: choice
+        default: all
+        options:
+          - all
+          - price-movers
+          - fno-automation
+          - ivp-ivr-analysis
+          - nse-rsi-divergence
+          - gift-nifty-oi
+      date:
+        description: "price-movers only: run date (YYYY-MM-DD), blank = today"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  # --------------------------------------------------------------------------
+  price-movers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: pipe-price-movers
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/price-movers
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'price-movers'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 10 * * 1-5","0 11 * * 1-5","30 11 * * 1-5","0 12 * * 1-5","30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5"]'), github.event.schedule))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: projects/price-movers/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the screen
+        id: screen
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          FLAGS=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            FLAGS="--skip-if-present"
+          fi
+          if [ -n "${{ inputs.date }}" ]; then
+            python screener.py --date "${{ inputs.date }}" $FLAGS
+          else
+            python screener.py $FLAGS
+          fi
+
+      - name: Commit the updated CSV
+        if: always()
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/price-movers/price_movers.csv
+          message: "data: movers"
+
+      - name: Report a setup failure
+        if: failure() && steps.screen.outcome == 'skipped'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -sS --max-time 60 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=price-movers: failed before the screen could run. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+  # --------------------------------------------------------------------------
+  fno-automation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: pipe-fno-automation
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/fno-automation
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'fno-automation'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["10 13 * * *","40 13 * * *","10 14 * * *","40 14 * * *","10 15 * * *"]'), github.event.schedule))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: projects/fno-automation/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Pull NSE EOD, compute sheets, deliver to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FNO_THRESHOLD: "0.08"
+        run: python fno_eod.py --days 20 --wait 20 --telegram --skip-if-sent --out out
+
+      - name: Update history
+        if: always()
+        run: python backfill.py --since-last
+
+      - name: Commit history shard
+        if: always()
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/fno-automation/data/history
+          message: "history: fno"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fno-eod
+          path: projects/fno-automation/out/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Notify failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN:-$TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="fno-automation FAILED - ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+  # --------------------------------------------------------------------------
+  ivp-ivr-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: pipe-ivp-ivr-analysis
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/ivp-ivr-analysis
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'ivp-ivr-analysis'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5","0 15 * * 1-5","30 15 * * 1-5","0 16 * * 1-5","30 16 * * 1-5","0 17 * * 1-5","30 17 * * 1-5","0 18 * * 1-5","30 18 * * 1-5"]'), github.event.schedule))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: projects/ivp-ivr-analysis/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create data and output directories
+        run: |
+          mkdir -p data data/daily output
+
+      - name: Rebuild database from per-day files
+        run: python scripts/bootstrap_db.py
+
+      - name: Check DB days
+        run: |
+          python -c "import sqlite3; conn = sqlite3.connect('data/iv_history.db'); count = conn.execute('SELECT COUNT(DISTINCT date) FROM daily_iv').fetchone()[0]; print(f'Days in daily_iv: {count}'); conn.close()"
+
+      - name: Run main analysis
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_ERROR_CHAT_ID: ${{ secrets.TELEGRAM_ERROR_CHAT_ID }}
+        run: python src/main.py
+
+      - name: Export today's reading file
+        run: python scripts/export_daily.py
+
+      # Ordinary commit now, not the old orphan-commit force-push: that trick
+      # rewrote the whole branch and would delete the other four projects.
+      # Repo growth is controlled by .gitignore instead - the rebuilt DB and the
+      # per-day workbook stay out of git, data/daily/*.json is the record.
+      - name: Commit results
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/ivp-ivr-analysis/data projects/ivp-ivr-analysis/config
+          message: "data: ivp-ivr"
+
+  # --------------------------------------------------------------------------
+  nse-rsi-divergence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: pipe-nse-rsi-divergence
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/nse-rsi-divergence
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'nse-rsi-divergence'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["0 12 * * 1-5","30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5","0 15 * * 1-5","30 15 * * 1-5","0 16 * * 1-5","30 16 * * 1-5","0 17 * * 1-5","30 17 * * 1-5","0 18 * * 1-5","30 18 * * 1-5"]'), github.event.schedule))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: projects/nse-rsi-divergence/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh F&O universe
+        run: python scripts/refresh_fno.py
+
+      # Cache keys are namespaced to this pipeline: caches are shared across the
+      # whole repo now, so a generic key could be evicted by another pipeline's
+      # cache and force a 220-day backfill.
+      - name: Restore price history
+        uses: actions/cache/restore@v4
+        with:
+          path: projects/nse-rsi-divergence/data/market.db
+          key: rsi-price-db-v3-${{ github.run_id }}
+          restore-keys: |
+            rsi-price-db-v3-
+
+      - name: Backfill history on first run
+        run: |
+          if [ ! -f data/market.db ]; then
+            echo "No cached price DB - running initial ~1yr backfill"
+            python scripts/backfill.py --days 220
+          fi
+
+      - name: Run daily scan
+        id: scan
+        env:
+          PROFILE: ${{ vars.PROFILE || 'tight' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python run_daily.py --wait
+          else
+            python run_daily.py
+          fi
+
+      - name: Write run summary
+        if: steps.scan.outputs.changed == 'true'
+        run: python scripts/summarize.py >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save price history
+        if: steps.scan.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: projects/nse-rsi-divergence/data/market.db
+          key: rsi-price-db-v3-${{ github.run_id }}
+
+      - name: Commit signal snapshot
+        if: steps.scan.outputs.changed == 'true'
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/nse-rsi-divergence/output projects/nse-rsi-divergence/config
+          message: "data: rsi signals"
+
+  # --------------------------------------------------------------------------
+  gift-nifty-oi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: pipe-gift-nifty-oi
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: projects/gift-nifty-oi
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'gift-nifty-oi'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 23 * * 1-5","0 0 * * 2-6","30 0 * * 2-6","0 1 * * 2-6","30 1 * * 2-6"]'), github.event.schedule))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install chart deps
+        run: pip install --quiet pandas matplotlib
+
+      - name: Fetch latest GIFT Nifty OI
+        run: python fetch_oi.py
+
+      - name: Did the data change?
+        id: diff
+        run: |
+          git add -A -- .
+          if git diff --staged --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"
+          else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Resolve Telegram chat id
+        id: chat
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          CID="${TELEGRAM_CHAT_ID:-}"
+          if [ -z "$CID" ]; then CID=$(python3 resolve_chat.py); fi
+          echo "id=$CID" >> "$GITHUB_OUTPUT"
+
+      - name: Build chart and send to Telegram
+        if: steps.chat.outputs.id != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          python plot_chart.py
+          if ! curl -sS --fail-with-body -X POST \
+               -F chat_id=${{ steps.chat.outputs.id }} \
+               -F caption="GIFT Nifty OI - $(date -u +%F)" \
+               -F photo=@chart.png \
+               "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto" > /tmp/tg.json; then
+            echo "Telegram HTTP error; response body:"; head -c 400 /tmp/tg.json; echo; exit 1
+          fi
+          head -c 400 /tmp/tg.json; echo
+          python3 -c 'import json; d=json.load(open("/tmp/tg.json")); raise SystemExit(0 if d.get("ok") is True else 1)'
+
+      - name: Commit if changed
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/gift-nifty-oi/data
+          message: "data: gift oi"
+
+      - name: Notify failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          CID="${TELEGRAM_CHAT_ID:-}"
+          if [ -z "$CID" ]; then CID=$(python3 resolve_chat.py || true); fi
+          if [ -z "$CID" ]; then echo "no chat id for failure notice"; exit 0; fi
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode chat_id="$CID" \
+            --data-urlencode text="gift-nifty-oi FAILED $(date -u '+%F %H:%M UTC') - no chart was sent. Log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            || true

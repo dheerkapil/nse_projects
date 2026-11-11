@@ -155,7 +155,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FNO_THRESHOLD: "0.08"
-        run: python fno_eod.py --days 20 --wait 20 --telegram --skip-if-sent --out out
+        run: python fno_eod.py --days 20 --wait 2 --telegram --skip-if-sent --out out
 
       - name: Update history
         if: always()
@@ -302,7 +302,7 @@ jobs:
           PROFILE: ${{ vars.PROFILE || 'tight' }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            python run_daily.py --wait
+            python run_daily.py
           else
             python run_daily.py
           fi

@@ -82,20 +82,16 @@ is never re-sent as a result.
 
 ### Reliable timing (external trigger)
 
-GitHub's `schedule` trigger is best-effort and runs from a shared queue. On this
-repository it has been firing **anywhere from ~35 minutes to ~10 hours late**
-(measured against the cron slot), so a report written for 18:00 IST can land
-after midnight. Nothing in the workflow file can control this.
+GitHub's `schedule` trigger is best-effort and runs from a shared queue — on the
+old standalone repository it fired anywhere from ~35 minutes to ~10 hours late.
+This pipeline is now dispatched by an external timer (cron-job.org) against
+`.github/workflows/batch.yml` at the root of this monorepo, with
+`inputs.pipeline = ivp-ivr-analysis`.
 
-The fix is to trigger the workflow with `workflow_dispatch`, which starts
-immediately, from an external timer — see
-**[docs/external-trigger.md](docs/external-trigger.md)** for the exact setup
-(a fine-grained token plus a free cron service).
-
-The in-workflow `schedule` ladder is kept as a **fallback**: if the external
-timer is ever down, you still get your report, just at GitHub's unpredictable
-time. Because the workflow is idempotent, both firing together still yields
-exactly one report.
+The `schedule` ladder inside `batch.yml` is kept as a **fallback**: if the
+external timer is ever down, you still get your report, just at GitHub's
+unpredictable time. Because the run is idempotent, both firing together still
+yields exactly one report.
 
 ## Setup
 

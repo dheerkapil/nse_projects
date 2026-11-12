@@ -96,7 +96,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          FLAGS=""
+          FLAGS="--skip-if-present"
           if [ "${{ github.event_name }}" = "schedule" ]; then
             FLAGS="--skip-if-present"
           fi
@@ -336,7 +336,7 @@ jobs:
       run:
         working-directory: projects/gift-nifty-oi
     if: >-
-      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'gift-nifty-oi'))
+      (github.event_name == 'workflow_dispatch' && inputs.pipeline == 'gift-nifty-oi')
       || (github.event_name == 'schedule' && contains(fromJSON('["30 23 * * 1-5","0 0 * * 2-6","30 0 * * 2-6","0 1 * * 2-6","30 1 * * 2-6"]'), github.event.schedule))
     steps:
       - uses: actions/checkout@v4

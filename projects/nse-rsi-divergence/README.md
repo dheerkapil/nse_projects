@@ -83,8 +83,14 @@ python tests/test_divergence.py
 
 - **GitHub Actions** (`.github/workflows/daily.yml`) runs the scan after market close and
   commits `output/daily_signals.json`.
-- **Render** runs `web/app.py` via gunicorn (see `Procfile`); the dashboard reads the
-  committed snapshot. Set `APP_PASSWORD` and `SESSION_SECRET_KEY` in Render's env.
+- **Render** runs `web/app.py` via gunicorn (see `Procfile`). Set `APP_PASSWORD`
+  and `SESSION_SECRET_KEY` in Render's env.
+- **The dashboard fetches the snapshot at request time** from
+  `raw.githubusercontent.com` (path set by `SNAPSHOT_URL`, cached for
+  `SNAPSHOT_TTL` seconds, default 60), so new signals appear without a redeploy.
+  If the fetch fails it falls back to the copy baked into the image, then to the
+  SQLite store. Because of this, auto-deploy can stay off — otherwise every one
+  of the ~13 ladder runs a day would trigger a rebuild.
 
 ## Roadmap
 

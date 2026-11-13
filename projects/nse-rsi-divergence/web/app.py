@@ -1,13 +1,17 @@
 """Flask dashboard for the NSE RSI-divergence screener.
 
-Reads the daily signal snapshot (output/daily_signals.json) written by
-run_daily.py, and falls back to the SQLite store if the snapshot is absent.
+Reads the daily signal snapshot written by run_daily.py. The snapshot is
+fetched from GitHub at request time (cached for SNAPSHOT_TTL seconds) so the
+dashboard is current without a redeploy; if that fetch fails it falls back to
+the copy baked into the image, then to the SQLite store.
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
+import time
+import urllib.request
 from functools import wraps
 from pathlib import Path
 
@@ -30,13 +34,45 @@ def login_required(f):
     return wrapper
 
 
+SNAPSHOT_URL = os.environ.get(
+    "SNAPSHOT_URL",
+    "https://raw.githubusercontent.com/dheerkapil/nse_projects/main/"
+    "projects/nse-rsi-divergence/output/daily_signals.json",
+)
+SNAPSHOT_TTL = int(os.environ.get("SNAPSHOT_TTL", "60"))
+
+_cache = {"at": 0.0, "data": None}
+
+
+def _fetch_remote():
+    """The snapshot as published by the pipeline, or None."""
+    try:
+        req = urllib.request.Request(
+            SNAPSHOT_URL, headers={"User-Agent": "rsi-divergence-dashboard"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        print(f"snapshot: remote fetch failed ({exc})")
+        return None
+
+
 def load_snapshot() -> dict:
-    snap = config.OUTPUT_DIR / "daily_signals.json"
-    if snap.exists():
-        try:
-            return json.loads(snap.read_text())
-        except Exception:
-            pass
+    now = time.time()
+    if _cache["data"] is not None and now - _cache["at"] < SNAPSHOT_TTL:
+        return _cache["data"]
+
+    data = _fetch_remote()
+    if data is None:
+        # Fall back to the copy baked into the image at build time.
+        snap = config.OUTPUT_DIR / "daily_signals.json"
+        if snap.exists():
+            try:
+                data = json.loads(snap.read_text())
+            except Exception:
+                data = None
+    if data is not None:
+        _cache.update(at=now, data=data)
+        return data
     # Fallback: read straight from the DB (local dev)
     try:
         from src.database import get_signals

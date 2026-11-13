@@ -247,7 +247,7 @@ jobs:
       - name: Commit results
         uses: ./.github/actions/commit-push
         with:
-          paths: projects/ivp-ivr-analysis/data projects/ivp-ivr-analysis/config
+          paths: projects/ivp-ivr-analysis/data projects/ivp-ivr-analysis/config projects/common
           message: "data: ivp-ivr"
 
   # --------------------------------------------------------------------------

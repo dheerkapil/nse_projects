@@ -6,7 +6,7 @@ is a holiday and, if so, sends a one-off holiday notice instead of a report.
 
 Source of truth, in order:
   1. NSE's live holiday-master API (segment FO — this is an F&O report).
-  2. config/nse_holidays.json, a bundled copy of the same list, used when the
+  2. projects/common/nse_holidays.json, a bundled copy of the same list, used when the
      API is unreachable (NSE sometimes refuses cloud-runner IPs). This bundled
      copy is refreshed weekly — see sync_holiday_list().
 
@@ -24,7 +24,8 @@ import requests
 
 from src.config import now_ist
 
-_HOLIDAY_FILE = Path(__file__).resolve().parent.parent / "config" / "nse_holidays.json"
+_HOLIDAY_FILE = (Path(__file__).resolve().parent.parent.parent
+                 / "common" / "nse_holidays.json")
 _API_URL = "https://www.nseindia.com/api/holiday-master?type=trading"
 _SEGMENT = "FO"                     # Futures & Options — the segment we report on
 

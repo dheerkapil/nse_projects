@@ -268,7 +268,7 @@ def main():
     init_database()
 
     # Weekly holiday-list refresh: first run on/after Monday 18:00 IST. Keeps
-    # the bundled fallback in config/nse_holidays.json in step with NSE.
+    # the bundled fallback in projects/common/nse_holidays.json in step with NSE.
     if should_sync(now, get_holiday_sync_week()):
         ok, changed, count = sync_holiday_list(now.year)
         if ok:

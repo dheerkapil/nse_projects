@@ -77,9 +77,9 @@ CSV_PATH = Path(__file__).resolve().with_name("price_movers.csv")
 XLSX_PATH = Path(__file__).resolve().with_name("price_movers.xlsx")
 SHEET_NAME = "movers"
 
-# Fixed-date NSE holidays (certain every year). Variable-date holidays - Holi,
-# Diwali, Id, Good Friday etc. - must be added here by hand each January when
-# NSE publishes the next year's calendar. See README.
+# Fallback only: fixed-date NSE holidays, which are the same every year. The
+# full calendar - including the variable dates - is read from
+# projects/common/nse_holidays.json (see shared_holiday_dates below).
 NSE_FIXED_HOLIDAYS = {
     "01-26",  # Republic Day
     "05-01",  # Maharashtra Day
@@ -87,6 +87,30 @@ NSE_FIXED_HOLIDAYS = {
     "10-02",  # Gandhi Jayanti
     "12-25",  # Christmas
 }
+
+# Shared NSE calendar, maintained by ivp-ivr-analysis from NSE's holiday-master
+# API and refreshed weekly. This is what covers the variable-date holidays -
+# Holi, Diwali, Id, Good Friday - that the fixed list above cannot know about.
+# Falls back silently to the fixed list if the file is missing or unreadable.
+_SHARED_HOLIDAYS = (Path(__file__).resolve().parent.parent
+                    / "common" / "nse_holidays.json")
+_shared_cache = None
+
+
+def shared_holiday_dates():
+    """Every ISO date in the shared calendar, or an empty set."""
+    global _shared_cache
+    if _shared_cache is None:
+        dates = set()
+        try:
+            payload = json.loads(_SHARED_HOLIDAYS.read_text())
+            for year_block in (payload.get("holidays") or {}).values():
+                if isinstance(year_block, dict):
+                    dates.update(year_block.keys())
+        except Exception:
+            dates = set()
+        _shared_cache = dates
+    return _shared_cache
 
 
 # ------------------------------------------------------------------ fetching
@@ -489,6 +513,8 @@ def report_failure(token, chat_id, date_str, stage, exc):
 # --------------------------------------------------------------------- main
 def is_trading_day(day):
     if day.weekday() >= 5:
+        return False
+    if day.isoformat() in shared_holiday_dates():
         return False
     return day.strftime("%m-%d") not in NSE_FIXED_HOLIDAYS
 

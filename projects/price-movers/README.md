@@ -123,10 +123,12 @@ weekend/holiday/repeat-snapshot guards).
   the day the workflow first runs.
 - **Market cap is live-only** for the same reason; it is TradingView's current
   figure for the stock.
-- **Holidays.** Fixed-date NSE holidays are hardcoded in `screener.py`. The
-  variable ones (Holi, Diwali, Id, Good Friday and so on) need adding each
-  January when NSE publishes the next calendar — otherwise the repeat-snapshot
-  guard is what stops a holiday from being recorded as a session.
+- **Holidays.** The NSE calendar is read from `projects/common/nse_holidays.json`,
+  maintained by `ivp-ivr-analysis` from NSE's holiday-master API and refreshed
+  weekly. That covers both the fixed and the variable holidays (Holi, Diwali,
+  Id, Good Friday). The fixed-date list in `screener.py` remains as a fallback
+  if that file is ever missing, and the repeat-snapshot guard is the last line
+  of defence against recording a holiday as a session.
 - **One source.** All values, including rvol and market cap, come from
   TradingView. If the scanner is rate-limited or changes its field names, the
   run fails loudly rather than writing partial data.

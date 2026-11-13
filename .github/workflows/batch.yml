@@ -12,37 +12,17 @@ name: batch
 
 on:
   schedule:
-    # --- price-movers: 16:00-20:00 IST, Mon-Fri (9 slots) ---
-    - cron: "30 10 * * 1-5"
-    - cron: "0 11 * * 1-5"
-    - cron: "30 11 * * 1-5"
-    - cron: "0 12 * * 1-5"
-    - cron: "30 12 * * 1-5"
-    - cron: "0 13 * * 1-5"
-    - cron: "30 13 * * 1-5"
-    - cron: "0 14 * * 1-5"
-    - cron: "30 14 * * 1-5"
-    # --- fno-automation: 18:40-20:40 IST, every day (5 slots) ---
-    - cron: "10 13 * * *"
-    - cron: "40 13 * * *"
-    - cron: "10 14 * * *"
-    - cron: "40 14 * * *"
-    - cron: "10 15 * * *"
-    # --- ivp-ivr-analysis: 18:00-00:00 IST, Mon-Fri (13 slots) ---
-    - cron: "0 15 * * 1-5"
-    - cron: "30 15 * * 1-5"
-    - cron: "0 16 * * 1-5"
-    - cron: "30 16 * * 1-5"
-    - cron: "0 17 * * 1-5"
-    - cron: "30 17 * * 1-5"
-    - cron: "0 18 * * 1-5"
-    - cron: "30 18 * * 1-5"
-    # --- gift-nifty-oi: 05:00-07:00 IST, Tue-Sat (5 slots) ---
-    - cron: "30 23 * * 1-5"
-    - cron: "0 0 * * 2-6"
-    - cron: "30 0 * * 2-6"
-    - cron: "0 1 * * 2-6"
-    - cron: "30 1 * * 2-6"
+    # FALLBACK ONLY. The real triggers are the cron-job.org dispatches (SETUP.md),
+    # which fire on the minute. GitHub's own scheduler can be hours late and
+    # bunched - on 13 Nov it delivered the day's slots between 00:09 and 04:32 IST
+    # - so each pipeline keeps just ONE late slot here. If the external cron or
+    # its PAT dies you still get a single attempt at the end of that pipeline's
+    # window, with no backlog storm and no duplicate messages. Every run is
+    # idempotent, so a late slot is harmless when the day's data already went out.
+    - cron: "30 14 * * 1-5"    # price-movers    20:00 IST
+    - cron: "10 15 * * *"      # fno-automation  20:40 IST
+    - cron: "30 18 * * 1-5"    # ivp-ivr + rsi   00:00 IST
+    - cron: "30 1 * * 2-6"     # gift-nifty-oi   07:00 IST
   workflow_dispatch:
     inputs:
       pipeline:
@@ -77,7 +57,7 @@ jobs:
         working-directory: projects/price-movers
     if: >-
       (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'price-movers'))
-      || (github.event_name == 'schedule' && contains(fromJSON('["30 10 * * 1-5","0 11 * * 1-5","30 11 * * 1-5","0 12 * * 1-5","30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5"]'), github.event.schedule))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 14 * * 1-5"]'), github.event.schedule))
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +116,7 @@ jobs:
         working-directory: projects/fno-automation
     if: >-
       (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'fno-automation'))
-      || (github.event_name == 'schedule' && contains(fromJSON('["10 13 * * *","40 13 * * *","10 14 * * *","40 14 * * *","10 15 * * *"]'), github.event.schedule))
+      || (github.event_name == 'schedule' && contains(fromJSON('["10 15 * * *"]'), github.event.schedule))
     steps:
       - uses: actions/checkout@v4
 
@@ -200,7 +180,7 @@ jobs:
         working-directory: projects/ivp-ivr-analysis
     if: >-
       (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'ivp-ivr-analysis'))
-      || (github.event_name == 'schedule' && contains(fromJSON('["30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5","0 15 * * 1-5","30 15 * * 1-5","0 16 * * 1-5","30 16 * * 1-5","0 17 * * 1-5","30 17 * * 1-5","0 18 * * 1-5","30 18 * * 1-5"]'), github.event.schedule))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 18 * * 1-5"]'), github.event.schedule))
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -262,7 +242,7 @@ jobs:
         working-directory: projects/nse-rsi-divergence
     if: >-
       (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'nse-rsi-divergence'))
-      || (github.event_name == 'schedule' && contains(fromJSON('["0 12 * * 1-5","30 12 * * 1-5","0 13 * * 1-5","30 13 * * 1-5","0 14 * * 1-5","30 14 * * 1-5","0 15 * * 1-5","30 15 * * 1-5","0 16 * * 1-5","30 16 * * 1-5","0 17 * * 1-5","30 17 * * 1-5","0 18 * * 1-5","30 18 * * 1-5"]'), github.event.schedule))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 18 * * 1-5"]'), github.event.schedule))
     steps:
       - uses: actions/checkout@v4
 
@@ -337,7 +317,7 @@ jobs:
         working-directory: projects/gift-nifty-oi
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.pipeline == 'gift-nifty-oi')
-      || (github.event_name == 'schedule' && contains(fromJSON('["30 23 * * 1-5","0 0 * * 2-6","30 0 * * 2-6","0 1 * * 2-6","30 1 * * 2-6"]'), github.event.schedule))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 1 * * 2-6"]'), github.event.schedule))
     steps:
       - uses: actions/checkout@v4
 

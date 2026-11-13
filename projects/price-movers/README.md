@@ -74,8 +74,10 @@ Every run ends with **exactly one** Telegram message:
 - the updated Excel workbook, or
 - a failure alert naming the stage that broke and the error, with a link to the
   workflow run, or
-- a note that there was no NSE session (weekend, holiday) or that the data was
-  identical to the previous session.
+- nothing at all, on a weekend or holiday — the run exits quietly rather than
+  repeating a "no session" note on every slot.
+
+When the data is identical to the previous session, the run exits quietly too.
 
 ## Setup
 

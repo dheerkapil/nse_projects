@@ -522,9 +522,9 @@ def is_trading_day(day):
 def run(args, day, date_str):
     """The actual job. Raises on anything unexpected."""
     if not args.force and not is_trading_day(day):
-        return {"status": "closed",
-                "message": f"<b>Price movers - {date_str}</b>\n"
-                           f"No NSE session today (weekend or holiday)."}
+        # Weekend or holiday: nothing to send. Repeating this every slot is noise
+        # (and GitHub's late schedule can fire several), so stay silent.
+        return {"status": "closed", "message": ""}
 
     # A delayed trigger can land at any hour. Before the session has closed
     # there is no EOD data for today - the feed still serves yesterday's, which
@@ -631,6 +631,10 @@ def main(argv=None):
 
         if result["status"] == "already":
             print(f"{date_str}: already recorded - nothing to do.")
+            return 0
+
+        if result["status"] == "closed":
+            print(f"{date_str}: no NSE session (weekend or holiday) - nothing sent.")
             return 0
 
         if args.no_telegram:

@@ -7,11 +7,16 @@ just live side by side instead of in five separate repos.
 
 | pipeline | folder | fires (IST) | what it produces |
 |---|---|---|---|
-| price-movers | `projects/price-movers` | 16:00–20:00, Mon–Fri, 9 slots | +5% movers CSV → Telegram |
-| fno-automation | `projects/fno-automation` | 18:40–20:40 daily, 5 slots | EOD F&O buildup → Telegram |
-| ivp-ivr-analysis | `projects/ivp-ivr-analysis` | 18:00–00:00, Mon–Fri, 13 slots | IVP/IVR matrix → Telegram |
-| nse-rsi-divergence | `projects/nse-rsi-divergence` | 17:30–00:00, Mon–Fri, 14 slots | divergence signals → JSON snapshot |
-| gift-nifty-oi | `projects/gift-nifty-oi` | 05:00–07:00, Tue–Sat, 5 slots | OI chart → Telegram |
+| price-movers | `projects/price-movers` | 16:00 daily | +5% movers CSV → Telegram |
+| fno-automation | `projects/fno-automation` | 19:00 daily | EOD F&O buildup → Telegram |
+| ivp-ivr-analysis | `projects/ivp-ivr-analysis` | 18:30, retried hourly | IVP/IVR matrix → Telegram |
+| nse-rsi-divergence | `projects/nse-rsi-divergence` | 19:05, retried hourly | divergence signals → JSON snapshot |
+| gift-nifty-oi | `projects/gift-nifty-oi` | 05:00 Tue–Sat | OI chart → Telegram |
+
+Scheduling lives outside GitHub: cron-job.org dispatches `batch.yml` at those
+times (see `SETUP.md`), because GitHub's own scheduler can run hours late and
+bunched. The `schedule:` block in `batch.yml` holds one late slot per pipeline as
+a fallback only.
 
 Every pipeline is still idempotent: each run checks whether today's output
 already exists and exits quietly if it does. That is why the overlapping slots

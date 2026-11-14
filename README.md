@@ -12,6 +12,7 @@ just live side by side instead of in five separate repos.
 | ivp-ivr-analysis | `projects/ivp-ivr-analysis` | 18:30, retried hourly | IVP/IVR matrix → Telegram |
 | nse-rsi-divergence | `projects/nse-rsi-divergence` | 19:05, retried hourly | divergence signals → JSON snapshot |
 | gift-nifty-oi | `projects/gift-nifty-oi` | 05:00 Tue–Sat | OI chart → Telegram |
+| participant-oi | `projects/participant-oi` | 18:30–23:30, first success wins | participant positioning + chart → Telegram |
 
 Scheduling lives outside GitHub: cron-job.org dispatches `batch.yml` at those
 times (see `SETUP.md`), because GitHub's own scheduler can run hours late and

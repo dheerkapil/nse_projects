@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Daily participant-wise open interest: fetch, append, report to Telegram.
+"""Daily participant-wise open interest: fetch, append, deliver the workbook.
 
 Replaces the manual loop in derivatives_data_longerterm_new_site.xlsm: download
-NSE's fao_participant_oi_<DDMMYYYY>.csv, append it, recompute the positioning
-views and post a summary plus a chart.
+NSE's fao_participant_oi_<DDMMYYYY>.csv, append it, rebuild the analysis
+workbook and send it to Telegram as a document.
 
-    python run_daily.py                 # fill any missing sessions, then report
-    python run_daily.py --no-telegram   # fetch + report to stdout only
+    python run_daily.py                 # fill any missing sessions, then send
+    python run_daily.py --no-telegram   # build the file locally only
     python run_daily.py --date 2026-11-12
     python run_daily.py --skip-if-sent  # used by the scheduled slots
 """
@@ -19,11 +19,11 @@ import sys
 from datetime import date
 
 import fetch
-import report
 import store
+import workbook
 
 
-def send_telegram(text, photo=None):
+def send_document(path, caption):
     import requests
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -33,27 +33,47 @@ def send_telegram(text, photo=None):
               file=sys.stderr)
         return False
 
-    base = f"https://api.telegram.org/bot{token}"
-    if photo:
-        with open(photo, "rb") as fh:
-            resp = requests.post(
-                f"{base}/sendPhoto",
-                data={"chat_id": chat, "caption": text[:1024], "parse_mode": "HTML"},
-                files={"photo": fh}, timeout=60)
-        if resp.ok and resp.json().get("ok"):
-            return True
-        print(f"sendPhoto failed: {resp.status_code} {resp.text[:200]}",
-              file=sys.stderr)
-        # fall through to a text-only message so the numbers still arrive
-
-    resp = requests.post(
-        f"{base}/sendMessage",
-        data={"chat_id": chat, "text": text[:4096], "parse_mode": "HTML"},
-        timeout=60)
-    if resp.ok and resp.json().get("ok"):
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    with open(path, "rb") as fh:
+        resp = requests.post(
+            url,
+            data={"chat_id": chat, "caption": caption[:1024], "parse_mode": "HTML"},
+            files={"document": (os.path.basename(path), fh,
+                                "application/vnd.openxmlformats-officedocument."
+                                "spreadsheetml.sheet")},
+            timeout=120,
+        )
+    try:
+        payload = resp.json()
+    except Exception:
+        payload = {}
+    if resp.ok and payload.get("ok"):
         return True
-    print(f"sendMessage failed: {resp.status_code} {resp.text[:200]}", file=sys.stderr)
+    print(f"sendDocument failed: {resp.status_code} {resp.text[:300]}", file=sys.stderr)
     return False
+
+
+def caption_for(history, closes, target):
+    stamp = date.fromisoformat(target).strftime("%d %b %Y")
+    parts = [f"<b>Participant OI — {stamp}</b>"]
+    close = closes.get(target)
+    if close is not None:
+        earlier = [d for d in sorted(closes) if d < target]
+        if earlier:
+            prev = closes[earlier[-1]]
+            parts.append(f"Nifty {close:,.2f} ({close - prev:+,.2f}, "
+                         f"{(close - prev) / prev * 100:+.2f}%)")
+        else:
+            parts.append(f"Nifty {close:,.2f}")
+
+    row = history.get(target, {})
+    fii = row.get("FII")
+    if fii:
+        net = fii["Future Index Long"] - fii["Future Index Short"]
+        gross = fii["Future Index Long"] + fii["Future Index Short"]
+        share = (fii["Future Index Long"] / gross * 100) if gross else 0
+        parts.append(f"FII index fut net {net:+,} (long {share:.0f}%)")
+    return "\n".join(parts)
 
 
 def main(argv=None):
@@ -66,10 +86,8 @@ def main(argv=None):
                     help="do nothing if this date has already been sent")
     args = ap.parse_args(argv)
 
-    if args.date:
-        wanted = [date.fromisoformat(args.date)]
-    else:
-        wanted = store.missing_sessions(args.lookback)
+    wanted = ([date.fromisoformat(args.date)] if args.date
+              else store.missing_sessions(args.lookback))
 
     added = 0
     for day in wanted:
@@ -96,20 +114,21 @@ def main(argv=None):
         return 0
 
     closes = store.nifty_closes()
-    text = report.build_text(history, target, closes)
-    print("\n" + text.replace("<b>", "").replace("</b>", "")
-          .replace("<i>", "").replace("</i>", "") + "\n")
+    path = workbook.build(history, closes)
+    caption = caption_for(history, closes, target)
+    print(f"{target}: workbook written to {path} ({path.stat().st_size / 1024:.0f} KB), "
+          f"{added} rows added")
+    print(caption.replace("<b>", "").replace("</b>", ""))
 
     if args.no_telegram:
-        print(f"rows added: {added}; Telegram post skipped (--no-telegram).")
+        print("Telegram post skipped (--no-telegram).")
         return 0
 
-    chart = report.build_chart(history, closes)
-    if send_telegram(text, chart):
+    if send_document(path, caption):
         state["sent"] = target
         state["sent_at"] = date.today().isoformat()
         store.write_state(state)
-        print("Telegram post sent.")
+        print("Workbook sent to Telegram.")
         return 0
     return 1
 

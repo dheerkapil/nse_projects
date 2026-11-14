@@ -9,14 +9,23 @@ bhavcopy (usually by 18:30 IST, as late as ~21:00 on expiry days).
 
 ## What it produces
 
-One Telegram message per session plus a chart:
+One Excel workbook per session, sent to Telegram as a document — the same
+sheets the old file had, without macros, support sheets or refresh plumbing.
+Everything is written as plain values, so it opens anywhere:
 
-- **Index futures** — net contracts per client (FII, Client, Pro, DII), the day's
-  change, and each client's long share of its own book.
-- **Index options** — net call and put contracts per client, with day changes.
-- **Stock futures** — net contracts per client.
-- **Percentile** — where FII index futures sit in the last 60 sessions.
-- **Chart** — Nifty close against FII and Client net index futures.
+| sheet | content |
+|---|---|
+| `Nifty` | date, close, change, change % |
+| `conc` | each client's share of gross OI, per segment, plus totals |
+| `index fut` | Day Action and Net OI (long/short) per client |
+| `index opt` | Call and Put blocks per client, market CE/PE/PCR, FII PCR |
+| `stock fut` | Day Action and Net OI per client |
+| `stock opt` | Call and Put blocks per client |
+| `participant_oi` | the raw record, every session since 2022-03-21 |
+
+The analysis sheets carry the last 120 sessions, oldest first, laid out in the
+same columns as the original workbook. The Telegram caption carries the date,
+the Nifty close and FII's net index-futures position.
 
 ## Layout
 
@@ -24,8 +33,8 @@ One Telegram message per session plus a chart:
 fetch.py       # download + parse one session (4 client rows)
 store.py       # history CSV, trading calendar, state, price file
 analysis.py    # nets, day actions, percentiles
-report.py      # Telegram text + chart
-run_daily.py   # fetch missing sessions, then report
+workbook.py    # builds the Excel deliverable
+run_daily.py   # fetch missing sessions, then send the workbook
 data/
   participant_oi.csv   # the record: one row per (date, client)
   state.json           # last date sent
@@ -38,7 +47,7 @@ old workbook, in the same column order so the two can be compared row for row.
 
 ```bash
 python run_daily.py                 # fill missing sessions, then post
-python run_daily.py --no-telegram   # print the report instead of sending
+python run_daily.py --no-telegram   # build the workbook locally, don't send
 python run_daily.py --date 2026-11-12
 python run_daily.py --skip-if-sent  # what the scheduled runs use
 python run_daily.py --lookback 60   # widen the backfill window

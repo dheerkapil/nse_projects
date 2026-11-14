@@ -7,6 +7,7 @@ projects/ivp-ivr-analysis/output/*.xlsx
 projects/ivp-ivr-analysis/data/iv_history.db
 projects/gift-nifty-oi/chart.png
 projects/participant-oi/chart.png
+projects/participant-oi/participant_oi.xlsx
 projects/nse-rsi-divergence/data/*.db
 
 # python

@@ -38,6 +38,7 @@ on:
           - nse-rsi-divergence
           - gift-nifty-oi
           - participant-oi
+          - unusual-options
       date:
         description: "price-movers only: run date (YYYY-MM-DD), blank = today"
         required: false
@@ -437,3 +438,53 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TELEGRAM_CHAT_ID}" \
             --data-urlencode text="participant-oi FAILED - ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            # Far-OTM stock options with fresh open interest. Sits on the same evening
+  # ladder as the F&O pipeline: the first slot that finds the bhavcopy builds and
+  # posts the workbook, later slots exit on --skip-if-sent.
+  unusual-options:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: pipe-unusual-options
+      cancel-in-progress: false
+    if: >-
+      (github.event_name == 'workflow_dispatch' && (inputs.pipeline == 'all' || inputs.pipeline == 'unusual-options'))
+      || (github.event_name == 'schedule' && contains(fromJSON('["30 15 * * 1-5"]'), github.event.schedule))
+    defaults:
+      run:
+        working-directory: projects/unusual-options
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: projects/unusual-options/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch the session and post the workbook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run_daily.py --skip-if-sent
+
+      - name: Commit the history
+        if: always()
+        uses: ./.github/actions/commit-push
+        with:
+          paths: projects/unusual-options/data
+          message: "data: unusual options"
+
+      - name: Notify failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="unusual-options FAILED - ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            

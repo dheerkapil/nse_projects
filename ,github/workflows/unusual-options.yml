@@ -1,0 +1,41 @@
+name: unusual-options
+
+on:
+  schedule:
+    - cron: "30 15 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unusual-options
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: unusual-options-project/projects/unusual-options
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: unusual-options-project/projects/unusual-options/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Fetch the session and post the workbook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run_daily.py --skip-if-sent
+      - name: Commit the history
+        if: always()
+        uses: ./.github/actions/commit-push
+        with:
+          paths: unusual-options-project/projects/unusual-options/data
+          message: "data: unusual options"

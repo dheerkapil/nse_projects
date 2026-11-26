@@ -141,7 +141,7 @@ jobs:
         run: python fno_eod.py --days 20 --wait 2 --telegram --skip-if-sent --out out
 
       - name: Update history
-        if: always()
+        if: success()
         run: python backfill.py --since-last
 
       - name: Commit history shard
